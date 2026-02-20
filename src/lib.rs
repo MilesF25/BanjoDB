@@ -65,6 +65,37 @@ impl Database {
     }
 
     //change later temp notes from ai to help//
+    fn account_exisiting_check(&self) -> PyResult<(bool, bool)> {
+        let guard = self.conn.lock().unwrap();
+
+        // Check if connection is still open
+        let conn = guard
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
+
+        // We query the total count and the count of admins in one go.
+        // SUM(CASE...) is a common SQL trick to count specific types of rows.
+        let mut stmt = conn
+            .prepare("SELECT COUNT(*), SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) FROM users")
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        // query_row returns a single row of results
+        let result: (i32, i32) = stmt
+            .query_row([], |row| {
+                Ok((
+                    row.get(0)?,                                // Total users
+                    row.get::<_, Option<i32>>(1)?.unwrap_or(0), // Admin users (handles NULL if table is empty)
+                ))
+            })
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        let any_exists = result.0 > 0;
+        let admin_exists = result.1 > 0;
+
+        // Rust returns a tuple, Python receives (True/False, True/False)
+        Ok((any_exists, admin_exists))
+    }
+
     fn list_tables(&self) -> PyResult<Vec<String>> {
         let guard = self.conn.lock().unwrap();
 

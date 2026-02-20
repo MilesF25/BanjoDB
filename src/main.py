@@ -27,22 +27,44 @@
 ## back to item selection menu
 
 import rpydb
+import os
 
 
 def main():
-    "this will create the rust sqlite db"
-    # call rust db creation function
-    db = rpydb.Database("banjo.db")  # opens DB and keeps it alive while `db` exists
-    # db.initialize()  # create tables if needed
-    # titles = db.get_user_notes(1)  # call method implemented in Rust
-    table = db.list_tables()
-    print(table)
-    db.close()
-    # print("Titles:", titles)
+    print(
+        "Welcome, checking if the database exists (as of now its hardcoded to look for banjo db)"
+    )
+    exists = file_checks()
+    if not exists:
+        # (RUST) Need to check if a db exists, if there are accounts and if there is a master account
+        "this will create the rust sqlite db"
+        # call rust db creation function
+        db = rpydb.Database("banjo.db")  # opens DB and keeps it alive while `db` exists
+        table = db.list_tables()
+        # print(table)
+        db.close()
+    else:
+        db = rpydb.Database("banjo.db")
+        accountE = account_exist(db)
+        print(accountE)
 
 
-if __name__ == "__main__":
-    main()
+# first function
+def file_checks() -> bool:
+    # THE CODE IS HARDCODED FOR BANJO DB
+
+    databasename = "banjo.db"
+    # Check if BanjoDB directory exists in current directory
+    if os.path.isfile(databasename):
+        print("The database file has been found. Starting program.")
+    else:
+        print(
+            f"The database file '{databasename}' was not found. Making a new Database"
+        )
+    # Return True if the file exists, False otherwise
+    return os.path.isfile(databasename)
+
+
 # Passowrd and account management
 
 ## def account check
@@ -53,7 +75,32 @@ if __name__ == "__main__":
 ## if there are it will ask them to enter a password
 ### Return True
 
+
+# TODO: Look into checking the tuple and solving the ifs, after that do account login and passowrd store stuff
+def account_exist(database_connection) -> (bool, bool):
+    # Will call rust function to see if any accounts exists in the user database
+    # Will return a tuple (True, True), if accounts are found, if a master account (has admin role) is there.
+    # Will return a tuple (True, False), if only a master account is foun
+    # Will return a tuple (False, True), if an account is found but no master account
+    # Will return a tuple (False, False), if nothing is found
+
+    # Call the Rust function
+    any_acc, master_acc = database_connection.account_exisiting_check()
+
+    if not any_acc:
+        print("System is empty. Please create the first account.")
+    elif any_acc and not master_acc:
+        print("Accounts exist, but no Admin found! Safety risk.")
+    elif any_acc and master_acc:
+        print("System ready. Admin account verified.")
+    else:
+        print("Unexpected result from account_exisiting_check.")
+
+    return (any_acc, master_acc)
+
+
 ## Def account create
+## Admin useres are given the role admin
 ## Will be asked to submit a user and a password. Once submitted it will make a salt and combine it with each then hashed and store it, hash password only
 ## will make add the owener name to the column id
 ## will check if any accounts with the same user exist, if they do it will ask them to try again
@@ -64,3 +111,7 @@ if __name__ == "__main__":
 ## if it matches
 ###return true
 ## if it doesn't have them try again, max of 3 tries
+
+
+if __name__ == "__main__":
+    main()
