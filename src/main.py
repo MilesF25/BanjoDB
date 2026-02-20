@@ -44,6 +44,7 @@ def main():
         # print(table)
         db.close()
     else:
+        # TODO: Now that i have the tuple, what do i do. 1, message if there are not accounts, 2 if there is no admin idk yet, 3 if there are admin but no account, make a new account. 4 ask if login or accout create
         db = rpydb.Database("banjo.db")
         accountE = account_exist(db)
         print(accountE)
