@@ -1,7 +1,18 @@
 use pyo3::prelude::*;
-use rusqlite::{Connection, Result};
-use std::path::Path;
+// use rand::rngs::OsRng;
+use rusqlite::{Connection, params};
 use std::sync::Mutex;
+
+// Password hashing imports
+// use argon2::{
+//     Argon2, PasswordHash, PasswordVerifier,
+//     password_hash::{PasswordHasher, SaltString},
+// ;
+
+use argon2::{
+    Argon2, PasswordHash, PasswordVerifier,
+    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
+};
 
 /// A Python module implemented in Rust.
 
@@ -64,7 +75,79 @@ impl Database {
         })
     }
 
+    //makes the admin account. really is only called once//
+    fn create_admin_account(&self, username: String, password: String) -> PyResult<String> {
+        let mut guard = self.conn.lock().unwrap();
+        let conn = guard
+            .as_mut()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
+
+        // 1. Hash the password
+        // Argon2 handles the salt automatically using OsRng (secure random)
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::default();
+        let password_hash = argon2
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?
+            .to_string();
+
+        // 2. Insert into Database
+        let res = conn.execute(
+            "INSERT INTO users (username, password_hash, role) VALUES (?1, ?2, ?3)",
+            params![username, password_hash, "admin"],
+        );
+
+        // 3. Handle Errors (like if the username already exists)
+        match res {
+            Ok(_) => Ok(format!("Admin account '{}' created successfully", username)),
+            Err(e) => {
+                if e.to_string().contains("UNIQUE constraint failed") {
+                    Err(pyo3::exceptions::PyValueError::new_err(
+                        "Username already exists",
+                    ))
+                } else {
+                    Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+                }
+            }
+        }
+    }
+
     //change later temp notes from ai to help//
+    // fn create_admin_account(&self, username: String, password: String) -> PyResult<String> {
+    //     let mut guard = self.conn.lock().unwrap();
+    //     let conn = guard
+    //         .as_mut()
+    //         .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
+
+    //     // Now OsRng will be recognized!
+    //     let salt = SaltString::generate(&mut OsRng);
+    //     let argon2 = Argon2::default();
+
+    //     let password_hash = argon2
+    //         .hash_password(password.as_bytes(), &salt)
+    //         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?
+    //         .to_string();
+    //     // 2. Insert into Database
+    //     let res = conn.execute(
+    //         "INSERT INTO users (username, password_hash, role) VALUES (?1, ?2, ?3)",
+    //         params![username, password_hash, "admin"],
+    //     );
+
+    //     // 3. Handle Errors (like if the username already exists)
+    //     match res {
+    //         Ok(_) => Ok(format!("Admin account '{}' created successfully", username)),
+    //         Err(e) => {
+    //             if e.to_string().contains("UNIQUE constraint failed") {
+    //                 Err(pyo3::exceptions::PyValueError::new_err(
+    //                     "Username already exists",
+    //                 ))
+    //             } else {
+    //                 Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+    //             }
+    //         }
+    //     }
+    // }
+
     fn account_exisiting_check(&self) -> PyResult<(bool, bool)> {
         let guard = self.conn.lock().unwrap();
 

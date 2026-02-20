@@ -30,6 +30,7 @@ import rpydb
 import os
 
 
+# personal reminder, use the db. for database function calls
 def main():
     print(
         "Welcome, checking if the database exists (as of now its hardcoded to look for banjo db)"
@@ -40,14 +41,32 @@ def main():
         "this will create the rust sqlite db"
         # call rust db creation function
         db = rpydb.Database("banjo.db")  # opens DB and keeps it alive while `db` exists
-        table = db.list_tables()
+        make_admin_account(db)
+
         # print(table)
         db.close()
     else:
-        # TODO: Now that i have the tuple, what do i do. 1, message if there are not accounts, 2 if there is no admin idk yet, 3 if there are admin but no account, make a new account. 4 ask if login or accout create
         db = rpydb.Database("banjo.db")
         accountE = account_exist(db)
+        # Handle the result of account_exist(db):
+        # accountE is a tuple (any_acc, master_acc)
+        # - (False, False): No accounts exist. Prompt to create the first account.
+        # - (True, False): Accounts exist, but no admin/master account. (TODO: Decide what to do in this case)
+        # - (True, True): Accounts exist and a master/admin account exists. (TODO: Implement login/account creation logic)
+        if accountE == (False, False):
+            print("No accounts detected, moving to account creation")
+            # account_create()
+            make_admin_account(db)
+        elif accountE == (True, False):
+            print("As of now idk what to do in this situation")
+            pass
+        elif accountE == (True, True):
+            # account_login()
+            # pass is just so no error
+            pass
+
         print(accountE)
+        db.close()
 
 
 # first function
@@ -105,6 +124,16 @@ def account_exist(database_connection) -> (bool, bool):
 ## Will be asked to submit a user and a password. Once submitted it will make a salt and combine it with each then hashed and store it, hash password only
 ## will make add the owener name to the column id
 ## will check if any accounts with the same user exist, if they do it will ask them to try again
+
+
+def make_admin_account(database_connection) -> (str, str):
+    print("creating the admin account")
+    username = input("Enter a username: ")
+    password = input("Enter a password: ")
+    database_connection.create_admin_account(username, password)
+    print("account has been made")
+
+
 ##
 
 ## Def acccount login
