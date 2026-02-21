@@ -74,7 +74,28 @@ impl Database {
             conn: Mutex::new(Some(conn)),
         })
     }
+    //checks if the user is a admin
+    fn is_admin(&self, username: String) -> PyResult<bool> {
+        let guard = self.conn.lock().unwrap();
+        let conn = guard
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
 
+        // Prepare the query to look up the role for the given username
+        let mut stmt = conn
+            .prepare("SELECT role FROM users WHERE username = ?1")
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        // Query for the role string
+        let role: String = match stmt.query_row([username], |row| row.get(0)) {
+            Ok(r) => r,
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(false), // User doesn't exist, so not an admin
+            Err(e) => return Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
+        };
+
+        // Return true if the role is exactly "Admin"
+        Ok(role == "admin")
+    }
     //verify account
 
     fn verify_login(&self, username: String, password_attempt: String) -> PyResult<(bool, String)> {
@@ -140,12 +161,47 @@ impl Database {
         // 2. Insert into Database
         let res = conn.execute(
             "INSERT INTO users (username, password_hash, role) VALUES (?1, ?2, ?3)",
-            params![username, password_hash, "admin"],
+            params![username, password_hash, "Admin"],
         );
 
         // 3. Handle Errors (like if the username already exists)
         match res {
             Ok(_) => Ok(format!("Admin account '{}' created successfully", username)),
+            Err(e) => {
+                if e.to_string().contains("UNIQUE constraint failed") {
+                    Err(pyo3::exceptions::PyValueError::new_err(
+                        "Username already exists",
+                    ))
+                } else {
+                    Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+                }
+            }
+        }
+    }
+    fn create_user_account(&self, username: String, password: String) -> PyResult<String> {
+        let mut guard = self.conn.lock().unwrap();
+        let conn = guard
+            .as_mut()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
+
+        // 1. Hash the password
+        // Argon2 handles the salt automatically using OsRng (secure random)
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::default();
+        let password_hash = argon2
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?
+            .to_string();
+
+        // 2. Insert into Database
+        let res = conn.execute(
+            "INSERT INTO users (username, password_hash, role) VALUES (?1, ?2, ?3)",
+            params![username, password_hash, "User"],
+        );
+
+        // 3. Handle Errors (like if the username already exists)
+        match res {
+            Ok(_) => Ok(format!("User account '{}' created successfully", username)),
             Err(e) => {
                 if e.to_string().contains("UNIQUE constraint failed") {
                     Err(pyo3::exceptions::PyValueError::new_err(

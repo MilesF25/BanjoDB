@@ -41,7 +41,10 @@ def main():
         "this will create the rust sqlite db"
         # call rust db creation function
         db = rpydb.Database("banjo.db")  # opens DB and keeps it alive while `db` exists
+        print("enter a admin account")
         make_admin_account(db)
+        print("make a user account")
+        make_user_account(db)
 
         # print(table)
         db.close()
@@ -56,7 +59,8 @@ def main():
         # print("accountE:", accountE)
         # any_acc, master_acc = accountE
         # print("any_acc:", any_acc, "master_acc:", master_acc)
-        # print(accountE)
+        # print(accountE)'
+        ## TODO: these two parts need to have the user login after
         if accountE == (False, False):
             print("No accounts detected, moving to account creation")
             # account_create()
@@ -65,10 +69,32 @@ def main():
             print("As of now idk what to do in this situation")
             pass
         elif accountE == (True, True):
-            result = account_login(db)
+            # retuns a bool if loging works
+            result, user = account_login(db)
 
-            # pass is just so no error
-            pass
+            if not result:
+                print("failed login")
+            else:
+                # can have delete account option here but only admin can do that
+                print("""What would you like to do? 
+                    1. Make new account (Admin)
+                    2. Make a new admin account (Admin only)
+                    3. Delete account (Admin only)
+                    4. View notes
+                    """)
+                choice = input("Enter a number: ")
+                if choice == "1":
+                    # cehcks if user is admin
+                    ruadmin = admin_check(db, user)
+                    print(ruadmin)
+                    result = make_user_account(db)
+                elif choice == "2":
+                    result = make_admin_account(db)
+                elif choice == "3":
+                    pass
+                    # result = delete_account(db)
+
+                pass
 
         db.close()
 
@@ -130,18 +156,43 @@ def account_exist(database_connection) -> (bool, bool):
 ## will check if any accounts with the same user exist, if they do it will ask them to try again
 
 
-def make_admin_account(database_connection) -> (str, str):
+# Returns true if admin, false if not
+def admin_check(database_connection, username) -> bool:
+    print("Verifying Credentials")
+    admin = database_connection.is_admin(username)
+    if admin:
+        return True
+    else:
+        return False
+
+
+def make_admin_account(database_connection):
     print("creating the admin account")
     username = input("Enter a username: ")
     password = input("Enter a password: ")
-    database_connection.create_admin_account(username, password)
-    print("account has been made")
+    try:
+        database_connection.create_admin_account(username, password)
+        print("Admin account has been made")
+    except ValueError:
+        print("Account already exists")
+
+
+def make_user_account(database_connection):
+    print("creating the user account")
+    username = input("Enter a username: ")
+    password = input("Enter a password: ")
+    try:
+        database_connection.create_user_account(username, password)
+        print("User Account has been made")
+    except ValueError:
+        # lazy but this is small project
+        print("That account already exists or another issue")
 
 
 ## TODO: Make regular user sign in and do log in too
 
 
-def account_login(database_connection):
+def account_login(database_connection) -> (bool, str):
     print("Enter your user and pass to login")
     username = input("Enter a username: ")
     password = input("Enter a password: ")
@@ -149,8 +200,10 @@ def account_login(database_connection):
 
     if success:
         print(f"SUCCESS: {message}")
+        return True, username
     else:
         print(f"FAILURE: {message}")
+        return False, username
 
 
 ## Def acccount login
