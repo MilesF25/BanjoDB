@@ -53,6 +53,10 @@ def main():
         # - (False, False): No accounts exist. Prompt to create the first account.
         # - (True, False): Accounts exist, but no admin/master account. (TODO: Decide what to do in this case)
         # - (True, True): Accounts exist and a master/admin account exists. (TODO: Implement login/account creation logic)
+        # print("accountE:", accountE)
+        # any_acc, master_acc = accountE
+        # print("any_acc:", any_acc, "master_acc:", master_acc)
+        # print(accountE)
         if accountE == (False, False):
             print("No accounts detected, moving to account creation")
             # account_create()
@@ -61,11 +65,11 @@ def main():
             print("As of now idk what to do in this situation")
             pass
         elif accountE == (True, True):
-            # account_login()
+            result = account_login(db)
+
             # pass is just so no error
             pass
 
-        print(accountE)
         db.close()
 
 
@@ -134,7 +138,20 @@ def make_admin_account(database_connection) -> (str, str):
     print("account has been made")
 
 
-##
+## TODO: Make regular user sign in and do log in too
+
+
+def account_login(database_connection):
+    print("Enter your user and pass to login")
+    username = input("Enter a username: ")
+    password = input("Enter a password: ")
+    success, message = database_connection.verify_login(username, password)
+
+    if success:
+        print(f"SUCCESS: {message}")
+    else:
+        print(f"FAILURE: {message}")
+
 
 ## Def acccount login
 ## Will be asked to submit user and password, once submitted it will then go find the user name and compare the hash

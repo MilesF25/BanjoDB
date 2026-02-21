@@ -75,6 +75,52 @@ impl Database {
         })
     }
 
+    //verify account
+
+    fn verify_login(&self, username: String, password_attempt: String) -> PyResult<(bool, String)> {
+        let guard = self.conn.lock().unwrap();
+        let conn = guard
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
+
+        // 1. Fetch the stored hash from the DB
+        let mut stmt = conn
+            .prepare("SELECT password_hash FROM users WHERE username = ?1")
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        // Handle User existence
+        let stored_hash: String = match stmt.query_row([username], |row| row.get(0)) {
+            Ok(hash) => hash,
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                // Tell the user the account doesn't exist
+                return Ok((false, "User account not found.".to_string()));
+            }
+            Err(e) => return Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
+        };
+
+        // 2. Compare the attempt with the stored hash
+        let parsed_hash = match PasswordHash::new(&stored_hash) {
+            Ok(h) => h,
+            Err(_) => {
+                return Ok((
+                    false,
+                    "Internal error: Corrupted password hash.".to_string(),
+                ));
+            }
+        };
+
+        let is_valid = Argon2::default()
+            .verify_password(password_attempt.as_bytes(), &parsed_hash)
+            .is_ok();
+
+        if is_valid {
+            Ok((true, "Login successful!".to_string()))
+        } else {
+            // Tell the user the password was wrong
+            Ok((false, "Invalid password. Please try again.".to_string()))
+        }
+    }
+
     //makes the admin account. really is only called once//
     fn create_admin_account(&self, username: String, password: String) -> PyResult<String> {
         let mut guard = self.conn.lock().unwrap();
