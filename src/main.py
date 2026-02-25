@@ -28,6 +28,8 @@
 
 import rpydb
 import os
+import time
+import notes_funcs
 
 
 # personal reminder, use the db. for database function calls
@@ -41,10 +43,17 @@ def main():
         "this will create the rust sqlite db"
         # call rust db creation function
         db = rpydb.Database("banjo.db")  # opens DB and keeps it alive while `db` exists
-        print("enter a admin account")
+        print("Create a admin account")
         make_admin_account(db)
-        print("make a user account")
+        print("Create a user account")
         make_user_account(db)
+        clear_screen()
+        print("Login")
+        result, user = account_login(db)
+        if not result:
+            print("failed login")
+        else:
+            main_menu(db, user)
 
         # print(table)
         db.close()
@@ -66,7 +75,18 @@ def main():
             # account_create()
             make_admin_account(db)
         elif accountE == (True, False):
-            print("As of now idk what to do in this situation")
+            print("An accout existst but there is no admin, password recovery maybe")
+            # print("Login with Admin account")
+            # result, user = account_login(db)
+            # if not result:
+            #     print(
+            #         "Not an Admin, please find the admin creds and enter them to gain access"
+            #     )
+            # else:
+            #     time.sleep(1)
+            #     clear_screen()
+            #     main_menu(db, user)
+
             pass
         elif accountE == (True, True):
             # retuns a bool if loging works
@@ -75,28 +95,81 @@ def main():
             if not result:
                 print("failed login")
             else:
-                # can have delete account option here but only admin can do that
-                print("""What would you like to do? 
-                    1. Make new account (Admin)
-                    2. Make a new admin account (Admin only)
-                    3. Delete account (Admin only)
-                    4. View notes
-                    """)
-                choice = input("Enter a number: ")
-                if choice == "1":
-                    # cehcks if user is admin
-                    ruadmin = admin_check(db, user)
-                    print(ruadmin)
-                    result = make_user_account(db)
-                elif choice == "2":
-                    result = make_admin_account(db)
-                elif choice == "3":
-                    pass
-                    # result = delete_account(db)
-
-                pass
+                time.sleep(1)
+                clear_screen()
+                main_menu(db, user)
 
         db.close()
+
+
+# Function for main menu
+def main_menu(database_connection, username):
+    """Display the main menu for a logged-in user and handle actions.
+
+    This function performs actions directly (calls other functions)
+    rather than returning a numeric code. It loops until the user
+    chooses to logout/exit.
+    """
+    while True:
+        print("What would you like to do?")
+        print("1. Make new account (Admin)")
+        print("2. Make a new admin account (Admin only)")
+        print("3. Delete account (Admin only)")
+        print("4. View notes")
+        print("5. Logout/Exit")
+        choice = input("Enter a number: ").strip()
+
+        if choice == "1":
+            if admin_check(database_connection, username):
+                make_user_account(database_connection)
+            else:
+                print("Permission denied: admin only.")
+                print(f"{username} is")
+        elif choice == "2":
+            if admin_check(database_connection, username):
+                make_admin_account(database_connection)
+            else:
+                print("Permission denied: admin only.")
+        elif choice == "3":
+            clear_screen()
+            if admin_check(database_connection, username):
+                # Placeholder: deletion flow not implemented in Python layer
+                try:
+                    database_connection.delete_account_prompt()
+                except AttributeError:
+                    print("Delete account not implemented.")
+            else:
+                print("Permission denied: admin only.")
+        elif choice == "4":
+            clear_screen()
+            print("Note Options.")
+            notes_user_version(database_connection, username)
+            # TODO: Need to create the notes so they can be viewd. Only make things that can be viewed in vim
+            # call view notes function (2 versions, 1 admin, 1 user)
+            # takes username and db connection
+            # should let them
+        elif choice == "5":
+            print("Logging out.")
+            database_connection.close()
+        else:
+            print("Invalid choice, please try again.")
+
+
+def notes_user_version(database_connection, username):
+    print("What would you like to do?")
+    print(
+        "1. View You're Notes"
+    )  # should bring a list of their notes for them to select, once python gets the notes back if empty will say no notes and let them reutrn to menu
+
+    print("2. Edit Notes")  # again a list but this time it will open vim for editing
+    print(
+        "3. Delete Notes"
+    )  # List of their notes but the ones they select will be deleted, will double confirm
+    print("4. Make New Note")
+    choice = input("Enter a number: ").strip()
+
+    if choice == "1":
+        notes_funcs.note_retrieval(database_connection, username)
 
 
 # first function
@@ -126,7 +199,6 @@ def file_checks() -> bool:
 ### Return True
 
 
-# TODO: Look into checking the tuple and solving the ifs, after that do account login and passowrd store stuff
 def account_exist(database_connection) -> (bool, bool):
     # Will call rust function to see if any accounts exists in the user database
     # Will return a tuple (True, True), if accounts are found, if a master account (has admin role) is there.
@@ -140,7 +212,8 @@ def account_exist(database_connection) -> (bool, bool):
     if not any_acc:
         print("System is empty. Please create the first account.")
     elif any_acc and not master_acc:
-        print("Accounts exist, but no Admin found! Safety risk.")
+        print("""Accounts exist, but no Admin found! Safety risk.
+              (Please check the the role is Admin and not admin. It is hard coded for Admin)""")
     elif any_acc and master_acc:
         print("System ready. Admin account verified.")
     else:
@@ -150,7 +223,7 @@ def account_exist(database_connection) -> (bool, bool):
 
 
 ## Def account create
-## Admin useres are given the role admin
+## Admin useres are given the role adminc
 ## Will be asked to submit a user and a password. Once submitted it will make a salt and combine it with each then hashed and store it, hash password only
 ## will make add the owener name to the column id
 ## will check if any accounts with the same user exist, if they do it will ask them to try again
@@ -189,7 +262,17 @@ def make_user_account(database_connection):
         print("That account already exists or another issue")
 
 
-## TODO: Make regular user sign in and do log in too
+# Function for clearing the screen
+
+
+def clear_screen():
+    # Check the operating system name
+    if os.name == "nt":
+        # Command for Windows
+        _ = os.system("cls")
+    else:
+        # Command for Linux/macOS (posix)
+        _ = os.system("clear")
 
 
 def account_login(database_connection) -> (bool, str):

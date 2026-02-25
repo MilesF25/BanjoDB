@@ -59,6 +59,7 @@ impl Database {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 owner_id INTEGER NOT NULL,
                 title TEXT NOT NULL,
+                file_extension TEXT NOT NULL,
                 content BLOB NOT NULL,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
@@ -74,6 +75,46 @@ impl Database {
             conn: Mutex::new(Some(conn)),
         })
     }
+
+    //Notes functions//
+    // Returns a list of all file titles and their extensions for a specific user NOT ADMIN VERSION
+    fn list_my_files(&self, username: String) -> PyResult<Vec<(String, String)>> {
+        let guard = self.conn.lock().unwrap();
+        let conn = guard
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
+
+        // Query only the metadata (title and extension), not the heavy BLOB data
+        let mut stmt = conn
+            .prepare(
+                "SELECT n.title, n.file_extension 
+             FROM notes n 
+             JOIN users u ON n.owner_id = u.id 
+             WHERE u.username = ?1",
+            )
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        let note_iter = stmt
+            .query_map([username], |row| {
+                Ok((
+                    row.get::<_, String>(0)?, // Title
+                    row.get::<_, String>(1)?, // Extension
+                ))
+            })
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        let mut results = Vec::new();
+        for note in note_iter {
+            results
+                .push(note.map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?);
+        }
+
+        // If there are no files, results will be an empty Vec [].
+        // PyO3 turns this into an empty list [] in Python.
+        Ok(results)
+    }
+
+    // login functions//
     //checks if the user is a admin
     fn is_admin(&self, username: String) -> PyResult<bool> {
         let guard = self.conn.lock().unwrap();
@@ -94,7 +135,7 @@ impl Database {
         };
 
         // Return true if the role is exactly "Admin"
-        Ok(role == "admin")
+        Ok(role == "Admin")
     }
     //verify account
 
@@ -261,7 +302,7 @@ impl Database {
         // We query the total count and the count of admins in one go.
         // SUM(CASE...) is a common SQL trick to count specific types of rows.
         let mut stmt = conn
-            .prepare("SELECT COUNT(*), SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END) FROM users")
+            .prepare("SELECT COUNT(*), SUM(CASE WHEN role = 'Admin' THEN 1 ELSE 0 END) FROM users")
             .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         // query_row returns a single row of results
