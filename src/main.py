@@ -168,8 +168,11 @@ def notes_user_version(database_connection, username):
     print("4. Make New Note")
     choice = input("Enter a number: ").strip()
 
+    # Calls functions from the note funcs file
     if choice == "1":
         notes_funcs.note_retrieval(database_connection, username)
+    if choice == "4":
+        notes_funcs.note_creation(database_connection, username)
 
 
 # first function

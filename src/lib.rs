@@ -77,6 +77,29 @@ impl Database {
     }
 
     //Notes functions//
+    //function for saving a created note into the db//
+    fn save_new_note(
+        &self,
+        username: String,
+        title: String,
+        extension: String,
+        content: Vec<u8>,
+    ) -> PyResult<String> {
+        let guard = self.conn.lock().unwrap();
+        let conn = guard
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
+
+        // The 'content' here is the raw binary image of the file
+        conn.execute(
+            "INSERT INTO notes (owner_id, title, file_extension, content, created_at, updated_at) 
+             VALUES ((SELECT id FROM users WHERE username = ?1), ?2, ?3, ?4, unixepoch(), unixepoch())",
+            params![username, title, extension, content],
+        ).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        Ok(format!("File '{}' successfully vaulted.", title))
+    }
+
     // Returns a list of all file titles and their extensions for a specific user NOT ADMIN VERSION
     fn list_my_files(&self, username: String) -> PyResult<Vec<(String, String)>> {
         let guard = self.conn.lock().unwrap();
