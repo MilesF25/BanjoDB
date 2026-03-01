@@ -9,5 +9,9 @@ name = "rpydb"
 crate-type = ["cdylib"]
 
 [dependencies]
+argon2 = { version = "0.5", features = ["std"] }
 pyo3 = "0.28.1"
+
 rusqlite = { version = "0.38.0", features = ["bundled"] }
+rand_core = "0.10.0"
+rand = "0.10.0"
