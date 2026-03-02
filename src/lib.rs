@@ -100,6 +100,39 @@ impl Database {
         Ok(format!("File '{}' successfully vaulted.", title))
     }
 
+    /// Fetches the actual binary data and extension for a specific file title
+    fn get_file_content(
+        &self,
+        username: String,
+        title: String,
+    ) -> PyResult<Option<(Vec<u8>, String)>> {
+        let guard = self.conn.lock().unwrap();
+        let conn = guard
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT n.content, n.file_extension 
+             FROM notes n 
+             JOIN users u ON n.owner_id = u.id 
+             WHERE u.username = ?1 AND n.title = ?2",
+            )
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        let result = stmt.query_row([username, title], |row| {
+            Ok((
+                row.get::<_, Vec<u8>>(0)?, // content (bytes)
+                row.get::<_, String>(1)?,  // file_extension
+            ))
+        });
+
+        match result {
+            Ok(data) => Ok(Some(data)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
+        }
+    }
     // Returns a list of all file titles and their extensions for a specific user NOT ADMIN VERSION
     fn list_my_files(&self, username: String) -> PyResult<Vec<(String, String)>> {
         let guard = self.conn.lock().unwrap();

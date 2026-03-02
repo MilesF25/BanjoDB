@@ -7,28 +7,73 @@ import main
 
 
 def note_retrieval(db, username):
-    # Call Rust to get the list
+    # 1. Get the list from Rust
     files = db.list_my_files(username)
 
     if not files:
-        print("--- No notes, make some so you can view them ---")
+        print("\n--- No notes found. Create one first! ---")
         return
 
+    # 2. Display the menu
     print(f"\n--- {username}'s Vault ---")
-
-    # Python displays the list to the user
     for i, (title, ext) in enumerate(files):
         print(f"{i + 1}. {title}{ext}")
 
-    # Now the user can pick one
-    choice = input("\nSelect a number to open a file (or 'q' to quit): ")
+    # 3. Get User Selection
+    choice = input("\nSelect a number to open (or 'q' to quit): ").strip()
+    if choice.lower() == "q":
+        return
+
     if choice.isdigit():
         idx = int(choice) - 1
         if 0 <= idx < len(files):
-            selected_title = files[idx][0]  # Get the 'title' string
+            selected_title = files[idx][0]
 
-            # NOW you use the other function we wrote to get the bytes
-        # fetch_and_open_file(db, username, selected_title)
+            # --- START OF FETCH AND OPEN LOGIC ---
+
+            # 4. Fetch the 'Actual File' bytes and extension from Rust
+            result = db.get_file_content(username, selected_title)
+
+            if result is None:
+                print("Error: Could not retrieve file data.")
+                return
+
+            file_bytes, extension = result
+
+            # 5. Create a temporary "Real File" so Vim/OS can read it
+            # delete=False is important so we can close the handle but keep the file for Vim
+            with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as tf:
+                tf.write(file_bytes)
+                temp_path = tf.name
+
+            try:
+                # 6. Decide how to open based on extension
+                if extension in [".txt", ".md", ".py", ".rs", ".sh"]:
+                    print(f"Opening {selected_title} in Vim...")
+                    subprocess.run(["vim", temp_path])
+                else:
+                    print(f"Opening {selected_title} in system viewer...")
+                    # This works for PDFs, Images, etc.
+                    import platform
+
+                    if platform.system() == "Windows":
+                        os.startfile(temp_path)
+                    else:
+                        subprocess.run(["open", temp_path])
+
+                    input("Press Enter once you are finished viewing the file...")
+
+            finally:
+                # 7. SECURE CLEANUP: Wipe the file from the disk
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                    print(f"Temporary file {selected_title} has been wiped.")
+
+            # --- END OF FETCH AND OPEN LOGIC ---
+        else:
+            print("Invalid selection.")
+    else:
+        print("Please enter a valid number.")
 
 
 def note_creation(db, username):
