@@ -133,6 +133,34 @@ impl Database {
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
         }
     }
+
+    //forlist files for  admin view
+    fn list_all_users(&self) -> PyResult<Vec<String>> {
+        // 1. Lock the connection (Mutex)
+        let guard = self.conn.lock().unwrap();
+        let conn = guard
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
+
+        // 2. Prepare the SQL query
+        let mut stmt = conn
+            .prepare("SELECT username FROM users")
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        // 3. Execute and map the results to a Vec<String>
+        let user_iter = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        let mut users = Vec::new();
+        for user in user_iter {
+            // Push the individual username string into the vector
+            users.push(user.map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?);
+        }
+
+        // Python will receive this as a standard List: ["admin", "alice", "bob"]
+        Ok(users)
+    }
     // Returns a list of all file titles and their extensions for a specific user NOT ADMIN VERSION
     fn list_my_files(&self, username: String) -> PyResult<Vec<(String, String)>> {
         let guard = self.conn.lock().unwrap();

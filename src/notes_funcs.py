@@ -2,89 +2,132 @@ import rpydb
 import os
 import subprocess
 import tempfile
+import platform
 
 import main
 
 
-def note_retrieval(db, username):
-    # 1. Get the list from Rust
-    files = db.list_my_files(username)
+def note_retrieval(db, username, admin_bool):
+    # Check if the current user is an admin
+    is_admin = admin_bool
 
-    if not files:
-        print("\n--- No notes found. Create one first! ---")
-        return
+    if is_admin:
+        # --- ADMIN VERSION: Select a user first ---
+        all_users = db.list_all_users()
+        if not all_users:
+            print("No users found.")
+            return
 
-    # 2. Display the menu
-    print(f"\n--- {username}'s Vault ---")
-    for i, (title, ext) in enumerate(files):
-        print(f"{i + 1}. {title}{ext}")
+        print("\n--- [ADMIN] Select a User to Inspect ---")
+        for i, name in enumerate(all_users, 1):
+            print(f"{i}. {name}")
 
-    # 3. Get User Selection
-    choice = input("\nSelect a number to open (or 'q' to quit): ").strip()
-    if choice.lower() == "q":
-        return
+        u_choice = input("\nSelect user number (or 'q'): ").strip()
+        if u_choice.lower() == "q" or not u_choice.isdigit():
+            main.clear_screen()
+            return
 
-    if choice.isdigit():
-        idx = int(choice) - 1
-        if 0 <= idx < len(files):
-            selected_title = files[idx][0]
-
-            # --- START OF FETCH AND OPEN LOGIC ---
-
-            # 4. Fetch the 'Actual File' bytes and extension from Rust
-            result = db.get_file_content(username, selected_title)
-
-            if result is None:
-                print("Error: Could not retrieve file data.")
-                return
-
-            file_bytes, extension = result
-
-            # 5. Create a temporary "Real File" so Vim/OS can read it
-            # delete=False is important so we can close the handle but keep the file for Vim
-            with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as tf:
-                tf.write(file_bytes)
-                temp_path = tf.name
-
-            try:
-                # 6. Decide how to open based on extension
-                if extension in [".txt", ".md", ".py", ".rs", ".sh"]:
-                    print(f"Opening {selected_title} in Vim...")
-                    subprocess.run(["vim", temp_path])
-                else:
-                    print(f"Opening {selected_title} in system viewer...")
-                    # This works for PDFs, Images, etc.
-                    import platform
-
-                    if platform.system() == "Windows":
-                        os.startfile(temp_path)
-                    else:
-                        subprocess.run(["open", temp_path])
-
-                    input("Press Enter once you are finished viewing the file...")
-
-            finally:
-                # 7. SECURE CLEANUP: Wipe the file from the disk
-                if os.path.exists(temp_path):
-                    os.remove(temp_path)
-                    print(f"Temporary file {selected_title} has been wiped.")
-
-            # --- END OF FETCH AND OPEN LOGIC ---
+        u_idx = int(u_choice) - 1
+        if 0 <= u_idx < len(all_users):
+            target_user = all_users[u_idx]
         else:
             print("Invalid selection.")
+            return
     else:
-        print("Please enter a valid number.")
+        # --- USER VERSION: Target is just themselves ---
+        target_user = username
+
+    # --- SHARED FLOW: List files for the target_user ---
+    files = db.list_my_files(target_user)
+
+    if not files:
+        print(f"\n--- No notes found for {target_user} ---")
+        return
+
+    print(f"\n--- Viewing Vault: {target_user} ---")
+    for i, (title, ext) in enumerate(files, 1):
+        print(f"{i}. {title}{ext}")
+
+    f_choice = input("\nSelect file number to open (or 'q'): ").strip()
+    if f_choice.lower() == "q" or not f_choice.isdigit():
+        return
+
+    f_idx = int(f_choice) - 1
+    if 0 <= f_idx < len(files):
+        selected_title = files[f_idx][0]
+
+        # Fetch the content
+        result = db.get_file_content(target_user, selected_title)
+        if result:
+            file_bytes, extension = result
+
+            # Decide mode: Admin gets 'view' (read-only), User gets 'vim' (editor)
+            mode = "view" if is_admin else "edit"
+            view_file_logic(selected_title, extension, file_bytes, mode)
+        else:
+            print("Error: Could not retrieve file data.")
+    else:
+        print("Invalid file selection.")
 
 
+# Updated helper to handle both modes and OS platforms
+def view_file_logic(title, extension, data, mode):
+    with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as tf:
+        tf.write(data)
+        temp_path = tf.name
+
+    try:
+        # not sure if this will wokr on other systems
+        # vim/view (e.g. stock Windows).
+        if extension in [".txt", ".md", ".py", ".rs", ".sh"]:
+            if mode == "view":
+                print(f"Opening {title} in Read-Only mode (edits won't be saved)...")
+                # always attempt to launch vim in readonly mode; if it's not
+                # available fall back gracefully.
+                try:
+                    subprocess.run(["vim", "-R", temp_path])
+                except FileNotFoundError:
+                    # user doesn't have vim; fall back to platform-specific view
+                    if platform.system() == "Windows":
+                        try:
+                            with open(temp_path, "r", errors="ignore") as f:
+                                print(f.read())
+                        except Exception:
+                            pass
+                        input("Press Enter to continue...")
+                    else:
+                        # old version used  'view', keep that as a last resort
+                        subprocess.run(["view", temp_path])
+            else:
+                print(f"Opening {title} in Editor...")
+                if platform.system() == "Windows":
+                    subprocess.run(["notepad", temp_path])
+                else:
+                    subprocess.run(["vim", temp_path])
+        else:
+            print(f"Opening {title} in system viewer...")
+            if platform.system() == "Windows":
+                os.startfile(temp_path)
+            else:
+                # Use 'open' for Mac, 'xdg-open' for Linux
+                cmd = "open" if platform.system() == "Darwin" else "xdg-open"
+                subprocess.run([cmd, temp_path])
+            input("Press Enter to close and secure the file...")
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+
+# for making the note
 def note_creation(db, username):
     title = input("Enter a title for your new note: ").strip()
     if not title:
         return
 
-    # Extension menu (for Vim's benefit)
+    # Extension menu
     extensions = {"1": ".txt", "2": ".md", "3": ".py", "4": ".json"}
     print(f"\nSelect file type: {extensions} ")
-    choice = input("Choice [1]: ") or "1"
+    choice = input("Choice: ") or "1"
     selected_ext = extensions.get(choice, ".txt")
 
     # 1. Create the 'Actual File' on disk temporarily
@@ -92,8 +135,11 @@ def note_creation(db, username):
         temp_path = tf.name
 
     try:
-        # 2. Hand the file over to Vim
-        subprocess.run(["gvim", temp_path], check=True)
+        # 2. Hand the file over to an editor. fall back to notepad on Windows
+        editor_cmd = ["gvim", temp_path]
+        if platform.system() == "Windows":
+            editor_cmd = ["notepad", temp_path]
+        subprocess.run(editor_cmd, check=True)
 
         # 3. CRITICAL: Read the 'Actual File' as raw bytes
         # Opening in "rb" mode ensures we get the exact file data

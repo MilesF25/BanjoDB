@@ -157,6 +157,9 @@ def main_menu(database_connection, username):
 
 
 def notes_user_version(database_connection, username):
+    admin = database_connection.is_admin(username)
+    # TODO: Here is where it will check if its a admin
+
     print("What would you like to do?")
     print(
         "1. View You're Notes"
@@ -171,7 +174,7 @@ def notes_user_version(database_connection, username):
 
     # Calls functions from the note funcs file
     if choice == "1":
-        notes_funcs.note_retrieval(database_connection, username)
+        notes_funcs.note_retrieval(database_connection, username, admin)
     if choice == "4":
         notes_funcs.note_creation(database_connection, username)
 
