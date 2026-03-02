@@ -3,6 +3,8 @@ import os
 import subprocess
 import tempfile
 
+import main
+
 
 def note_retrieval(db, username):
     # Call Rust to get the list
@@ -46,7 +48,7 @@ def note_creation(db, username):
 
     try:
         # 2. Hand the file over to Vim
-        subprocess.run(["vim", temp_path], check=True)
+        subprocess.run(["gvim", temp_path], check=True)
 
         # 3. CRITICAL: Read the 'Actual File' as raw bytes
         # Opening in "rb" mode ensures we get the exact file data
@@ -57,13 +59,14 @@ def note_creation(db, username):
             print("File is empty, nothing to save.")
         else:
             # 4. Pass the entire file blob to Rust
-            message = db.save_new_note(username, title, selected_ext, file_blob)
+            db.save_new_note(username, title, selected_ext, file_blob)
             print("✅ File has been saved")
 
     except Exception as e:
         print(f"{e}")
 
     finally:
+        # main.clear_screen()
         # 5. Destroy the temporary file
         if os.path.exists(temp_path):
             os.remove(temp_path)

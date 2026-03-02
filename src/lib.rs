@@ -64,7 +64,7 @@ impl Database {
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
                 last_accessed INTEGER,
-                UNIQUE(owner_id, title),
+                UNIQUE(owner_id),
                 FOREIGN KEY(owner_id) REFERENCES users(id)
             )",
             (),

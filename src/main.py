@@ -151,6 +151,7 @@ def main_menu(database_connection, username):
         elif choice == "5":
             print("Logging out.")
             database_connection.close()
+            break
         else:
             print("Invalid choice, please try again.")
 
