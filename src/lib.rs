@@ -77,6 +77,38 @@ impl Database {
     }
 
     //Notes functions//
+    //updating notes
+    fn update_note_content(
+        &self,
+        username: String,
+        title: String,
+        new_content: Vec<u8>,
+    ) -> PyResult<String> {
+        let guard = self.conn.lock().unwrap();
+        let conn = guard
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
+
+        // Update the content and the updated_at timestamp
+        let result = conn.execute(
+            "UPDATE notes 
+             SET content = ?1, updated_at = unixepoch() 
+             WHERE title = ?2 AND owner_id = (SELECT id FROM users WHERE username = ?3)",
+            params![new_content, title, username],
+        );
+
+        match result {
+            Ok(rows_changed) => {
+                if rows_changed == 0 {
+                    return Err(pyo3::exceptions::PyValueError::new_err(
+                        "Note not found or update failed.",
+                    ));
+                }
+                Ok(format!("Note '{}' updated.", title))
+            }
+            Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
+        }
+    }
     //function for saving a created note into the db//
     fn save_new_note(
         &self,

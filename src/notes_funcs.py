@@ -7,7 +7,12 @@ import platform
 import main
 
 
-def note_retrieval(db, username, admin_bool):
+## Option 1
+## db isthe database connection
+## username is user
+## admin is bool
+## view is bool, True if only viewing, false if editing
+def note_retrieval(db, username, admin_bool, view):
     # Check if the current user is an admin
     is_admin = admin_bool
 
@@ -61,13 +66,67 @@ def note_retrieval(db, username, admin_bool):
         if result:
             file_bytes, extension = result
 
-            # Decide mode: Admin gets 'view' (read-only), User gets 'vim' (editor)
-            mode = "view" if is_admin else "edit"
-            view_file_logic(selected_title, extension, file_bytes, mode)
+            # The mode is view if it is true, else it will be edit
+            if view:
+                mode = "view"
+                view_file_logic(selected_title, extension, file_bytes, mode)
+            else:
+                edit_file(db, username, selected_title, extension, file_bytes)
         else:
             print("Error: Could not retrieve file data.")
     else:
         print("Invalid file selection.")
+
+
+def edit_file(db, username, title, extension, data):
+    # 1. Create the temporary file
+    with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as tf:
+        tf.write(data)
+        temp_path = tf.name
+
+    try:
+        if extension in [".txt", ".md", ".py", ".rs", ".sh"]:
+            print(f"--- Editing: {title}{extension} ---")
+
+            # 2. Launch Editor
+            # We use 'vim' (or 'gvim -f') because they block Python until closed
+            try:
+                subprocess.run(["vim", temp_path], check=True)
+            except FileNotFoundError:
+                print("Vim not found. Falling back to console view (Read Only).")
+                with open(temp_path, "r", errors="ignore") as f:
+                    print(f.read())
+                input("Press Enter to continue...")
+                return  # Exit early since we couldn't edit
+
+            # 3. Read the file back AFTER the editor closes
+            with open(temp_path, "rb") as f:
+                new_data = f.read()
+
+            # 4. THE AUTOMATIC RUST CALL
+            # Only update if the content actually changed
+            if new_data != data:
+                print("Changes detected. Syncing with Vault...")
+                # Calling the Rust backend
+                db.update_note_content(username, title, new_data)
+                print("✅ Vault updated successfully.")
+            else:
+                print("No changes detected. Vault remains unchanged.")
+
+        else:
+            # Binary files (PDF/JPG) are opened in system viewer (View-Only)
+            print(f"Opening {title} in system viewer...")
+            if platform.system() == "Windows":
+                os.startfile(temp_path)
+            else:
+                cmd = "open" if platform.system() == "Darwin" else "xdg-open"
+                subprocess.run([cmd, temp_path])
+            input("Press Enter to close and secure the file...")
+
+    finally:
+        # 5. Clean up the disk
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 
 # Updated helper to handle both modes and OS platforms
@@ -85,7 +144,7 @@ def view_file_logic(title, extension, data, mode):
                 # always attempt to launch vim in readonly mode; if it's not
                 # available fall back gracefully.
                 try:
-                    subprocess.run(["vim", "-R", temp_path])
+                    subprocess.run(["gvim", "-R", temp_path])
                 except FileNotFoundError:
                     # user doesn't have vim; fall back to platform-specific view
                     if platform.system() == "Windows":

@@ -13,9 +13,16 @@ Right now I am taking the security+ course and it got me thinking security (duh)
 
 - Notes
     - Viewing notes (complete)
-    - Editing notes (Need to do)
+    - Editing notes (Need to do) (almost done, need to open it in gvim instead of vim)
     - Deleting notes (Need to do)
 
 - Accounts
     - Delete Accounts (Need to do)
     - Account password recovery (Maybe?)
+
+
+## Need to Test
+- User
+    - Need to test normal user note creation and deletion
+    - Need to test normal user note edit
+    - Maybe remove updated at part of db
