@@ -1,5 +1,6 @@
 use pyo3::prelude::*;
 // use rand::rngs::OsRng;
+use chrono::prelude::*;
 use rusqlite::{Connection, params};
 use std::sync::Mutex;
 
@@ -54,6 +55,7 @@ impl Database {
         )
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
+        //the unique(owner_id, title) is to stop the program from only allowing the user ot make 1 note. adding title has it check if there is a similar title instead of just a id
         conn.execute(
             "CREATE TABLE IF NOT EXISTS notes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,9 +64,9 @@ impl Database {
                 file_extension TEXT NOT NULL,
                 content BLOB NOT NULL,
                 created_at INTEGER NOT NULL,
-                updated_at INTEGER NOT NULL,
-                last_accessed INTEGER,
-                UNIQUE(owner_id),
+                updated_at TEXT NOT NULL,
+                last_accessed TEXT,
+                UNIQUE(owner_id, title), 
                 FOREIGN KEY(owner_id) REFERENCES users(id)
             )",
             (),
@@ -77,6 +79,32 @@ impl Database {
     }
 
     //Notes functions//
+
+    fn delete_note(&self, username: String, title: String) -> PyResult<String> {
+        let guard = self.conn.lock().unwrap();
+        let conn = guard
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
+
+        // 1. Execute the DELETE query
+        let result = conn.execute(
+            "DELETE FROM notes 
+             WHERE title = ?1 AND owner_id = (SELECT id FROM users WHERE username = ?2)",
+            params![title, username],
+        );
+
+        match result {
+            Ok(rows_deleted) => {
+                if rows_deleted == 0 {
+                    return Err(pyo3::exceptions::PyValueError::new_err(
+                        "Note not found or already deleted.",
+                    ));
+                }
+                Ok(format!("Note '{}' has been permanently deleted.", title))
+            }
+            Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
+        }
+    }
     //updating notes
     fn update_note_content(
         &self,
@@ -89,12 +117,17 @@ impl Database {
             .as_ref()
             .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
 
+        //gets date and time
+        let now: DateTime<Local> = Local::now();
+        // Format the time as "YYYY-MM-DD HH:MM:SS"
+        let formatted_time = now.format("%Y-%m-%d %H:%M:%S").to_string();
+
         // Update the content and the updated_at timestamp
         let result = conn.execute(
             "UPDATE notes 
-             SET content = ?1, updated_at = unixepoch() 
-             WHERE title = ?2 AND owner_id = (SELECT id FROM users WHERE username = ?3)",
-            params![new_content, title, username],
+             SET content = ?1, updated_at = ?2, last_accessed = ?3 
+             WHERE title = ?4 AND owner_id = (SELECT id FROM users WHERE username = ?5)",
+            params![new_content, formatted_time, username, title, username],
         );
 
         match result {
@@ -122,12 +155,19 @@ impl Database {
             .as_ref()
             .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
 
+        //gets date and time
+        let now: DateTime<Local> = Local::now();
+        // Format the time as "YYYY-MM-DD HH:MM:SS"
+        let formatted_time = now.format("%Y-%m-%d %H:%M:%S").to_string();
+
         // The 'content' here is the raw binary image of the file
         conn.execute(
+            //removed hexipoch amd added ?5 to test
             "INSERT INTO notes (owner_id, title, file_extension, content, created_at, updated_at) 
-             VALUES ((SELECT id FROM users WHERE username = ?1), ?2, ?3, ?4, unixepoch(), unixepoch())",
-            params![username, title, extension, content],
-        ).map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+             VALUES ((SELECT id FROM users WHERE username = ?1), ?2, ?3, ?4, ?5, ?5)",
+            params![username, title, extension, content, formatted_time],
+        )
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
         Ok(format!("File '{}' successfully vaulted.", title))
     }

@@ -20,9 +20,38 @@ Right now I am taking the security+ course and it got me thinking security (duh)
     - Delete Accounts (Need to do)
     - Account password recovery (Maybe?)
 
+- Adding files to db (maybe)
+
 
 ## Need to Test
 - User
     - Need to test normal user note creation and deletion
     - Need to test normal user note edit
     - Maybe remove updated at part of db
+    - Making notes with the same title
+    - Users having same name and passwords
+    - opening non vim friendly files
+
+
+
+
+## Need to do 3/10
+
+
+
+- Notes
+    - Testing with different file types
+
+- Accounts
+    - Delete accounts
+    - Password recovery
+
+
+## Need to Test 3/10
+- User
+    - Need to test normal user note creation and deletion
+    - Need to test normal user note edit
+    - Maybe remove updated at part of db
+    - Making notes with the same title
+    - Users having same name and passwords
+    - opening non vim friendly files

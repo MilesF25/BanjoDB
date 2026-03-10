@@ -177,6 +177,8 @@ def notes_user_version(database_connection, username):
         notes_funcs.note_retrieval(database_connection, username, admin, True)
     if choice == "2":
         notes_funcs.note_retrieval(database_connection, username, admin, False)
+    if choice == "3":
+        notes_funcs.note_deletion(database_connection, username, admin)
 
     if choice == "4":
         notes_funcs.note_creation(database_connection, username)

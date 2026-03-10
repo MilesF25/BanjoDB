@@ -53,7 +53,7 @@ def note_retrieval(db, username, admin_bool, view):
     for i, (title, ext) in enumerate(files, 1):
         print(f"{i}. {title}{ext}")
 
-    f_choice = input("\nSelect file number to open (or 'q'): ").strip()
+    f_choice = input("\nSelect the file (or 'q' to quit): ").strip()
     if f_choice.lower() == "q" or not f_choice.isdigit():
         return
 
@@ -78,6 +78,68 @@ def note_retrieval(db, username, admin_bool, view):
         print("Invalid file selection.")
 
 
+# I should have broken up the functions more, live and learn
+
+
+def note_deletion(db, username, admin_bool):
+    # Check if the current user is an admin
+    is_admin = admin_bool
+
+    if is_admin:
+        # --- ADMIN VERSION: Select a user first ---
+        all_users = db.list_all_users()
+        if not all_users:
+            print("No users found.")
+            return
+
+        print("\n--- [ADMIN] Select a User to Inspect ---")
+        for i, name in enumerate(all_users, 1):
+            print(f"{i}. {name}")
+
+        u_choice = input("\nSelect user number (or 'q'): ").strip()
+        if u_choice.lower() == "q" or not u_choice.isdigit():
+            main.clear_screen()
+            return
+
+        u_idx = int(u_choice) - 1
+        if 0 <= u_idx < len(all_users):
+            target_user = all_users[u_idx]
+        else:
+            print("Invalid selection.")
+            return
+    else:
+        # --- USER VERSION: Target is just themselves ---
+        target_user = username
+
+    # --- SHARED FLOW: List files for the target_user ---
+    files = db.list_my_files(target_user)
+
+    if not files:
+        print(f"\n--- No notes found for {target_user} ---")
+        return
+
+    print(f"\n--- Viewing Vault: {target_user} ---")
+    for i, (title, ext) in enumerate(files, 1):
+        print(f"{i}. {title}{ext}")
+
+    f_choice = input("\nSelect the file (or 'q' to quit): ").strip()
+    if f_choice.lower() == "q" or not f_choice.isdigit():
+        return
+
+    f_idx = int(f_choice) - 1
+    if 0 <= f_idx < len(files):
+        selected_title = files[f_idx][0]
+
+        result = db.delete_note(target_user, selected_title)
+        if result:
+            print("File has been deleted")
+
+        else:
+            print("Error: Could not retrieve file data.")
+    else:
+        print("Invalid file selection.")
+
+
 def edit_file(db, username, title, extension, data):
     # 1. Create the temporary file
     with tempfile.NamedTemporaryFile(suffix=extension, delete=False) as tf:
@@ -91,7 +153,7 @@ def edit_file(db, username, title, extension, data):
             # 2. Launch Editor
             # We use 'vim' (or 'gvim -f') because they block Python until closed
             try:
-                subprocess.run(["vim", temp_path], check=True)
+                subprocess.run(["gvim", temp_path], check=True)
             except FileNotFoundError:
                 print("Vim not found. Falling back to console view (Read Only).")
                 with open(temp_path, "r", errors="ignore") as f:
@@ -196,9 +258,7 @@ def note_creation(db, username):
     try:
         # 2. Hand the file over to an editor. fall back to notepad on Windows
         editor_cmd = ["gvim", temp_path]
-        if platform.system() == "Windows":
-            editor_cmd = ["notepad", temp_path]
-        subprocess.run(editor_cmd, check=True)
+        subprocess.run(editor_cmd)
 
         # 3. CRITICAL: Read the 'Actual File' as raw bytes
         # Opening in "rb" mode ensures we get the exact file data
