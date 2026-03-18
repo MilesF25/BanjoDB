@@ -30,6 +30,7 @@ import rpydb
 import os
 import time
 import notes_funcs
+import account_funcs
 
 
 # personal reminder, use the db. for database function calls
@@ -133,9 +134,11 @@ def main_menu(database_connection, username):
         elif choice == "3":
             clear_screen()
             if admin_check(database_connection, username):
-                # Placeholder: deletion flow not implemented in Python layer
                 try:
-                    database_connection.delete_account_prompt()
+                    stored_username = account_funcs.account_selection(
+                        database_connection, username, True
+                    )
+                    account_funcs.account_deletion(database_connection, stored_username)
                 except AttributeError:
                     print("Delete account not implemented.")
             else:

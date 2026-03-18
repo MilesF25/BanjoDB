@@ -105,6 +105,38 @@ impl Database {
             Err(e) => Err(pyo3::exceptions::PyRuntimeError::new_err(e.to_string())),
         }
     }
+
+    //account functions//
+    fn account_delete(&self, username: String) -> PyResult<String> {
+        let guard = self.conn.lock().unwrap();
+        let conn = guard
+            .as_ref()
+            .ok_or_else(|| pyo3::exceptions::PyRuntimeError::new_err("Connection is closed"))?;
+
+        // 1. Delete all NOTES belonging to this user first.
+
+        conn.execute(
+            "DELETE FROM notes WHERE owner_id = (SELECT id FROM users WHERE username = ?1)",
+            params![username],
+        )
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        // 2. Now delete the USER account itself.
+        let rows_affected = conn
+            .execute("DELETE FROM users WHERE username = ?1", params![username])
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+        // 3. Check if the user actually existed
+        if rows_affected == 0 {
+            return Err(pyo3::exceptions::PyValueError::new_err("User not found."));
+        }
+
+        Ok(format!(
+            "Account '{}' and all associated data have been deleted.",
+            username
+        ))
+    }
+
     //updating notes
     fn update_note_content(
         &self,
